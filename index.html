@@ -113,11 +113,11 @@
     </div>
 
     <script type="module">
-      import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
-      import { GLTFLoader } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/loaders/GLTFLoader.js';
-      import { OrbitControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/OrbitControls.js';
-      import { XRControllerModelFactory } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/webxr/XRControllerModelFactory.js';
-      import { VRButton } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/webxr/VRButton.js';
+      import * as THREE from 'https://esm.sh/three@0.150.1';
+      import { GLTFLoader } from 'https://esm.sh/three@0.150.1/examples/jsm/loaders/GLTFLoader.js';
+      import { OrbitControls } from 'https://esm.sh/three@0.150.1/examples/jsm/controls/OrbitControls.js';
+      import { XRControllerModelFactory } from 'https://esm.sh/three@0.150.1/examples/jsm/webxr/XRControllerModelFactory.js';
+      import { VRButton } from 'https://esm.sh/three@0.150.1/examples/jsm/webxr/VRButton.js';
 
       const modelsPath = './models/';
       let teleportMarker;
@@ -181,7 +181,11 @@
 
         // Check XR support
         if (navigator.xr) {
+            // Add debug output for XR support
+            console.log("WebXR API is available");
+
             navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                console.log("VR support:", supported);
                 if (supported) {
                     button.disabled = false;
                     button.textContent = 'ENTER VR';
@@ -190,11 +194,13 @@
             });
 
             navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+                console.log("AR support:", supported);
                 if (supported) {
                     document.getElementById('xr-mode').disabled = false;
                 }
             });
         } else {
+            console.warn("WebXR API is not available on this device/browser");
             button.textContent = 'XR NOT SUPPORTED';
         }
 
@@ -212,12 +218,17 @@
 
         // Handle window resize
         window.addEventListener('resize', onWindowResize);
+
+        // Load a default model
+        loadModel(modelsPath + 'porsche_718_cayman_gt4_2020.glb');
     }
 
     function onButtonClick() {
         const sessionType = xrMode === 'vr' ? 'immersive-vr' : 'immersive-ar';
+
+        // Define session options
         const sessionInit = {
-            optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking']
+            optionalFeatures: ['local-floor', 'bounded-floor']
         };
 
         // For AR mode, set appropriate background settings
@@ -228,14 +239,19 @@
             sessionInit.domOverlay = { root: document.getElementById('ui') };
         }
 
+        console.log("Requesting XR session:", sessionType, sessionInit);
+
         navigator.xr.requestSession(sessionType, sessionInit)
             .then(onSessionStarted)
             .catch(error => {
                 console.error('Error starting XR session:', error);
+                alert('Failed to start XR session: ' + error.message);
             });
     }
 
     function onSessionStarted(session) {
+        console.log("XR Session started successfully");
+
         session.addEventListener('end', onSessionEnded);
 
         // Setup controllers
@@ -244,9 +260,37 @@
         // Configure renderer for the session
         renderer.xr.setSession(session);
 
-        // Store the base reference space
-        session.requestReferenceSpace('local-floor').then((referenceSpace) => {
-            baseReferenceSpace = referenceSpace;
+        // Request all possible reference spaces
+        const referenceSpaceTypes = ['local', 'local-floor', 'bounded-floor', 'unbounded'];
+
+        let referenceSpacePromises = referenceSpaceTypes.map(type => {
+            return session.requestReferenceSpace(type)
+                .then(space => ({ type, space }))
+                .catch(error => {
+                    console.warn(`Reference space ${type} not supported:`, error);
+                    return null;
+                });
+        });
+
+        Promise.all(referenceSpacePromises)
+            .then(results => {
+                results = results.filter(result => result !== null);
+
+                if (results.length === 0) {
+                    console.error("No reference spaces available");
+                    session.end();
+                    return;
+                }
+
+                console.log("Available reference spaces:", results.map(r => r.type));
+
+                // Prefer local-floor or bounded-floor for VR
+                let preferredSpace = results.find(r => r.type === 'local-floor') ||
+                                    results.find(r => r.type === 'bounded-floor') ||
+                                    results[0];
+
+                console.log("Using reference space:", preferredSpace.type);
+                baseReferenceSpace = preferredSpace.space;
         });
 
         // Hide UI in VR mode
@@ -256,6 +300,7 @@
     }
 
     function onSessionEnded() {
+        console.log("XR Session ended");
         // Show UI again
         document.getElementById('ui').style.display = 'block';
     }
@@ -305,6 +350,7 @@
 
     function setupScalingAndRotation() {
         // Handle thumbstick for teleportation
+        if (renderer.xr.getSession()) {
         renderer.xr.getSession().addEventListener('inputsourceschange', (event) => {
             event.added.forEach((inputSource) => {
                 if (inputSource.gamepad) {
@@ -323,6 +369,7 @@
                 }
             });
         });
+        }
     }
 
     function loadSelectedModel() {
@@ -367,17 +414,24 @@
                 scene.add(loadedModel);
 
                 loadingContainer.style.display = 'none';
+                console.log("Model loaded successfully:", modelPath);
             },
             // Progress callback
             function(xhr) {
+                if (xhr.total > 0) {
                 const progress = (xhr.loaded / xhr.total) * 100;
                 loadingProgress.style.width = progress + '%';
                 loadingPercentage.textContent = Math.round(progress) + '%';
+                } else {
+                    // If we can't calculate percentage (total unknown)
+                    loadingPercentage.textContent = 'Loading...';
+                }
             },
             // Error callback
             function(error) {
                 console.error('Error loading model:', error);
                 loadingContainer.style.display = 'none';
+                alert('Failed to load the model. Please check if the model file exists in the correct path.');
             }
         );
     }

@@ -270,7 +270,7 @@
         } else {
             // For AR, use absolute minimal configuration
             scene.background = null;
-            sessionInit = { optionalFeatures: [] };
+            sessionInit = { optionalFeatures: ['camera-access'] };
 
             // Only try dom-overlay if we're not on Quest since it might be causing issues
             const isQuestBrowser = /OculusBrowser/.test(navigator.userAgent);

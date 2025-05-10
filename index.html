@@ -262,24 +262,21 @@
 
         showDebug(`Attempting to enter ${sessionType} mode`);
 
-        // Ultra simplified session init - minimal options for maximum compatibility
+        // Configure session based on successful particles demo
         let sessionInit = {};
 
         if (xrMode === 'vr') {
-            sessionInit = { optionalFeatures: [] };
+            sessionInit = {
+                requiredFeatures: ['local-floor']
+            };
         } else {
-            // For AR, use absolute minimal configuration
+            // For AR, use exactly what works in the particles demo
             scene.background = null;
-            sessionInit = { optionalFeatures: ['camera-access'] };
+            sessionInit = {
+                requiredFeatures: ['local-floor']
+            };
 
-            // Only try dom-overlay if we're not on Quest since it might be causing issues
-            const isQuestBrowser = /OculusBrowser/.test(navigator.userAgent);
-            if (!isQuestBrowser) {
-                sessionInit.optionalFeatures.push('dom-overlay');
-                sessionInit.domOverlay = { root: document.getElementById('ui') };
-            }
-
-            showDebug(`Using minimal AR config. Quest browser: ${isQuestBrowser}`);
+            showDebug(`Using particles demo AR config that works on Quest 3 SE`);
         }
 
         showDebug(`Requesting ${sessionType} session...`);
@@ -291,18 +288,13 @@
             })
             .catch(error => {
                 showDebug(`Error starting ${sessionType} session: ${error.message}`);
-
-                // Check if this is a Quest and provide specific guidance
-                const isQuestBrowser = /OculusBrowser/.test(navigator.userAgent);
-                if (isQuestBrowser && sessionType === 'immersive-ar') {
-                    showDebug("Note: Full AR/MR camera access may not be supported in the Quest browser.");
-                    showDebug("MR is typically only fully supported in native Quest apps.");
-                }
             });
     }
 
     function onSessionStarted(session) {
         showDebug(`Session mode: ${session.mode}`);
+        showDebug(`Environment blend mode: ${session.environmentBlendMode || 'not available'}`);
+
         session.addEventListener('end', onSessionEnded);
 
         // Setup controllers
@@ -314,21 +306,26 @@
             showDebug("Renderer configured for XR session");
 
             // Handle AR session specifically
-            if (session.mode === 'immersive-ar') {
-                showDebug("Configuring for AR mode");
+            if (session.environmentBlendMode && session.environmentBlendMode !== 'opaque') {
+                showDebug("AR mode detected via environment blend mode");
+                // Hide room mesh in AR
+                roomMesh.visible = false;
                 // Ensure transparent clear for AR mode
                 renderer.setClearAlpha(0);
                 scene.background = null;
+            } else {
+                // In VR mode, show the room
+                roomMesh.visible = true;
             }
 
-            // Try to get a reference space, starting with 'viewer'
-            session.requestReferenceSpace('viewer')
+            // Try to get a reference space, starting with 'local-floor'
+            session.requestReferenceSpace('local-floor')
                 .then(space => {
-                    showDebug("Using 'viewer' reference space");
+                    showDebug("Using 'local-floor' reference space");
                     baseReferenceSpace = space;
                 })
                 .catch(error => {
-                    showDebug(`Viewer reference space error: ${error.message}`);
+                    showDebug(`local-floor reference space error: ${error.message}`);
 
                     // Fall back to local
                     session.requestReferenceSpace('local')

@@ -1,385 +1,352 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>3D Model Viewer XR/VR</title>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+    <title>3D Model Viewer - XR/VR</title>
+    <meta name="description" content="3D Model Viewer with XR and VR support for Meta Quest">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
+    <script src="https://unpkg.com/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-physics-system@v4.0.1/dist/aframe-physics-system.min.js"></script>
     <style>
-        body { margin: 0; font-family: Arial, sans-serif; }
-        #ui-container {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            z-index: 10;
-            background: rgba(0,0,0,0.7);
-            padding: 15px;
-            border-radius: 8px;
-            color: white;
-        }
-        #ui-container button, #ui-container select {
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
             padding: 10px;
-            margin: 5px;
-            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #model-selector {
+            margin-right: 15px;
+            padding: 8px;
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+        }
+        #mode-toggle {
+            padding: 8px 15px;
+            background: #4CAF50;
             border: none;
+            color: white;
             cursor: pointer;
         }
-        #progress-container {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            background-color: #555;
-            border-radius: 5px;
-            z-index: 10;
-            display: none; /* Hidden by default */
+        #loading-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+        #loading-text {
+            color: white;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        #progress-bar-container {
+            width: 50%;
+            height: 30px;
+            background: #333;
+            border-radius: 15px;
         }
         #progress-bar {
+            height: 100%;
             width: 0%;
-            height: 20px;
-            background-color: #4CAF50;
-            border-radius: 5px;
-            text-align: center;
-            line-height: 20px;
-            color: white;
-        }
-        #controls-info {
-            position: absolute;
-            bottom: 50px;
-            left: 10px;
-            z-index: 10;
-            background: rgba(0,0,0,0.5);
-            padding: 10px;
-            border-radius: 5px;
-            color: white;
-            font-size: 0.9em;
+            background: #4CAF50;
+            border-radius: 15px;
+            transition: width 0.3s;
         }
     </style>
 </head>
 <body>
-    <div id="ui-container">
-        <select id="model-select">
-            <option value="models/02498bb2af6c6ae3f665ac61c64df98d.glb">Model 3 (46MB)</option>
+    <div id="ui-overlay">
+        <select id="model-selector">
             <option value="models/porsche_718_cayman_gt4_2020.glb">Porsche 718 Cayman GT4</option>
-            <option value="models/7dbc94cbc268404e7c6e90e9e063dc73.glb">Model 2 (53MB)</option>
+            <option value="models/7dbc94cbc268404e7c6e90e9e063dc73.glb">Model 2</option>
+            <option value="models/02498bb2af6c6ae3f665ac61c64df98d.glb">Model 3</option>
         </select>
-        <button id="enter-vr">Enter VR</button>
-        <button id="enter-xr">Enter XR (Passthrough)</button>
-        <div>
-            <label for="scale-slider">Scale:</label>
-            <input type="range" id="scale-slider" min="0.1" max="3" step="0.1" value="1">
+        <button id="mode-toggle">Switch to XR Mode</button>
+    </div>
+
+    <div id="loading-container">
+        <div id="loading-text">Loading Model...</div>
+        <div id="progress-bar-container">
+            <div id="progress-bar"></div>
         </div>
     </div>
 
-    <div id="progress-container">
-        <div id="progress-bar">0%</div>
-    </div>
-
-    <div id="controls-info">
-        <p><b>Controls:</b></p>
-        <p><b>Teleport:</b> Point and Trigger (VR controllers)</p>
-        <p><b>Rotate Model:</b> Grip + Move (Right VR controller) or Alt + Mouse Drag</p>
-        <p><b>Scale Model:</b> Use slider in UI</p>
-        <p><i>Note: XR Passthrough requires a compatible device and browser.</i></p>
-    </div>
-
-    <a-scene id="my-scene"
-             background="color: #ECECEC"
-             renderer="colorManagement: true;"
-             webxr="optionalFeatures: dom-overlay,bounded-floor,hit-test,anchors,plane-detection,light-estimation,local-floor; overlayElement: #ui-container;">
-
-        <a-assets id="model-assets" timeout="60000">
-            <!-- Models will be loaded here by JavaScript -->
+    <a-scene physics="debug: false" renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true; highRefreshRate: true">
+        <a-assets>
+            <a-asset-item id="model" response-type="arraybuffer"></a-asset-item>
         </a-assets>
 
-        <!-- Camera Rig -->
-        <a-entity id="rig" position="0 0 2">
-            <a-camera id="camera" position="0 1.6 0" look-controls="magicWindowTrackingEnabled: false; touchEnabled: false; mouseEnabled: true">
+        <!-- Environment (visible in VR mode, hidden in XR mode) -->
+        <a-entity id="environment" environment="preset: forest; groundColor: #445; grid: cross; shadow: true;" visible="true"></a-entity>
+
+        <!-- Camera and controls -->
+        <a-entity id="rig" position="0 1.6 2">
+            <a-camera id="camera" look-controls wasd-controls position="0 0 0">
+                <a-entity cursor="fuse: false"
+                    position="0 0 -1"
+                    geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.02"
+                    material="color: white; shader: flat"
+                    raycaster="showLine: true; lineColor: white; lineOpacity: 0.5">
+                </a-entity>
             </a-camera>
-            <a-entity id="left-hand" oculus-touch-controls="hand: left" laser-controls="hand: left" teleport-controls="cameraRig: #rig; teleportOrigin: #camera; button: trigger; collisionEntities: .collidable; type: parabolic;"></a-entity>
-            <a-entity id="right-hand" oculus-touch-controls="hand: right" laser-controls="hand: right" raycaster="objects: .interactive; far:5;" line="color: #FFD700;">
-                 <!-- Custom component for model manipulation will be attached here or handled by script -->
+
+            <!-- Hand controllers -->
+            <a-entity id="left-hand"
+                    oculus-touch-controls="hand: left"
+                    teleport-controls="cameraRig: #rig; teleportOrigin: #camera; button: trigger; collisionEntities: [mixin='ground']; landingMaxAngle: 45; hitCylinderColor: #4CAF50; hitCylinderRadius: 0.2; hitCylinderHeight: 0.2;">
+            </a-entity>
+
+            <a-entity id="right-hand"
+                    oculus-touch-controls="hand: right"
+                    teleport-controls="cameraRig: #rig; teleportOrigin: #camera; button: trigger; collisionEntities: [mixin='ground']; landingMaxAngle: 45; hitCylinderColor: #4CAF50; hitCylinderRadius: 0.2; hitCylinderHeight: 0.2;">
             </a-entity>
         </a-entity>
 
-        <!-- Ground for teleportation -->
-        <a-plane id="ground" class="collidable" rotation="-90 0 0" width="50" height="50" color="#7BC8A4" visible="true"></a-plane>
+        <!-- Model container -->
+        <a-entity id="model-container" position="0 0 -2" rotation="0 0 0" scale="1 1 1"></a-entity>
 
-        <!-- Sky for VR mode -->
-        <a-sky id="sky" color="#87CEEB"></a-sky>
-
-        <!-- Model Entity -->
-        <a-entity id="model-pivot" position="0 0.5 0">
-            <a-entity id="current-model"
-                      class="interactive"
-                      gltf-model=""
-                      animation-mixer
-                      shadow="receive: false; cast: true">
-            </a-entity>
-        </a-entity>
+        <!-- Invisible ground for teleportation -->
+        <a-plane id="ground" position="0 0 0" rotation="-90 0 0" width="30" height="30" color="#666"
+                opacity="0.2" mixin="ground" visible="false"></a-plane>
 
         <!-- Lighting -->
-        <a-entity light="type: ambient; color: #BBB"></a-entity>
-        <a-entity light="type: directional; color: #FFF; intensity: 0.6" position="-0.5 1 1"></a-entity>
-
+        <a-light type="ambient" intensity="0.5"></a-light>
+        <a-light type="directional" position="1 1 1" intensity="0.6" cast-shadow="true"></a-light>
     </a-scene>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const sceneEl = document.querySelector('a-scene');
-            const assetsEl = document.getElementById('model-assets');
-            const modelEl = document.getElementById('current-model');
-            const modelPivotEl = document.getElementById('model-pivot');
-            const modelSelect = document.getElementById('model-select');
-            const progressBarContainer = document.getElementById('progress-container');
-            const progressBar = document.getElementById('progress-bar');
-            const scaleSlider = document.getElementById('scale-slider');
-            const enterVrButton = document.getElementById('enter-vr');
-            const enterXrButton = document.getElementById('enter-xr');
-            const groundEl = document.getElementById('ground');
-            const skyEl = document.getElementById('sky');
-            const rightHandEl = document.getElementById('right-hand');
+        // Elements
+        const scene = document.querySelector('a-scene');
+        const modelSelector = document.getElementById('model-selector');
+        const modeToggle = document.getElementById('mode-toggle');
+        const modelContainer = document.getElementById('model-container');
+        const loadingContainer = document.getElementById('loading-container');
+        const progressBar = document.getElementById('progress-bar');
+        const environment = document.getElementById('environment');
+        const leftHand = document.getElementById('left-hand');
+        const rightHand = document.getElementById('right-hand');
 
-            let currentModelUrl = '';
-            let isXrMode = false;
+        // State
+        let currentMode = 'vr';
+        let currentModel = null;
+        let isInVR = false;
 
-            function showProgress(show) {
-                progressBarContainer.style.display = show ? 'block' : 'none';
-            }
-
-            function updateProgress(event) {
-                const progress = event.detail.totalBytes > 0 ? (event.detail.loadedBytes / event.detail.totalBytes) * 100 : 0;
-                progressBar.style.width = progress + '%';
-                progressBar.textContent = Math.round(progress) + '%';
-            }
-
-            function loadModel(modelUrl) {
-                if (!modelUrl || currentModelUrl === modelUrl) return;
-
-                currentModelUrl = modelUrl;
-                showProgress(true);
-                progressBar.style.width = '0%';
-                progressBar.textContent = '0%';
-
-                // Clear previous model from assets if any, to avoid conflicts with same ID
-                const existingAsset = assetsEl.querySelector(`[src="${modelUrl}"]`);
-                if (existingAsset) existingAsset.remove();
-
-
-                const assetItem = document.createElement('a-asset-item');
-                assetItem.setAttribute('id', 'selected-glb');
-                assetItem.setAttribute('src', modelUrl);
-                assetItem.addEventListener('progress', updateProgress); // Standard THREE.Cache progress
-                assetsEl.appendChild(assetItem);
-
-                // A-Frame's GLTF loader also has its own progress.
-                // We can use a component to monitor it specifically for the gltf-model.
-                modelEl.setAttribute('gltf-model-loader-progress', '');
-
-
-                assetItem.addEventListener('loaded', () => {
-                    console.log('Asset loaded:', modelUrl);
-                    modelEl.setAttribute('gltf-model', `#selected-glb`);
-                    // Reset model scale and rotation
-                    modelEl.setAttribute('scale', '1 1 1');
-                    modelEl.setAttribute('rotation', '0 0 0');
-                    scaleSlider.value = 1;
-
-                    setTimeout(() => { // Give a moment for the model to render before hiding progress
-                       showProgress(false);
-                    }, 500);
-                });
-
-                modelEl.addEventListener('model-error', (e) => {
-                    console.error('Model loading error:', e.detail.error);
-                    showProgress(false);
-                    alert('Error loading model. Check console for details.');
-                });
-            }
-
-            // Custom component to listen to gltf-model specific progress
-            AFRAME.registerComponent('gltf-model-loader-progress', {
-              init: function () {
-                this.el.addEventListener('model-loaded', () => {
-                  // This event might fire before the main asset 'loaded' event depending on caching.
-                  // The main progress bar is tied to a-asset-item's progress.
-                  // We can add more fine-grained updates here if needed.
-                   console.log("gltf-model fully parsed and rendered.");
-                });
-                this.el.addEventListener('model-error', (e) => {
-                    console.error('Internal GLTF Model error:', e.detail.error);
-                });
-              }
-            });
-
-
-            modelSelect.addEventListener('change', (event) => {
-                loadModel(event.target.value);
-            });
-
-            scaleSlider.addEventListener('input', (event) => {
-                const scale = parseFloat(event.target.value);
-                modelEl.setAttribute('scale', `${scale} ${scale} ${scale}`);
-            });
-
-            enterVrButton.addEventListener('click', () => {
-                isXrMode = false;
-                sceneEl.setAttribute('webxr', 'mode: vr; optionalFeatures: dom-overlay,bounded-floor,local-floor; overlayElement: #ui-container;');
-                groundEl.setAttribute('visible', 'true');
-                skyEl.setAttribute('visible', 'true');
-                sceneEl.enterVR();
-            });
-
-            enterXrButton.addEventListener('click', () => {
-                if (navigator.xr) {
-                     navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-                        if (supported) {
-                            isXrMode = true;
-                            sceneEl.setAttribute('webxr', 'mode: ar; optionalFeatures: dom-overlay,bounded-floor,hit-test,anchors,plane-detection,light-estimation,local-floor; overlayElement: #ui-container;');
-                            groundEl.setAttribute('visible', 'false'); // Hide ground in AR
-                            skyEl.setAttribute('visible', 'false');   // Hide sky in AR
-                            sceneEl.enterVR(); // enterVR() is used for both VR and AR sessions
-                        } else {
-                            alert("Immersive AR (Passthrough) is not supported on this device/browser.");
-                        }
-                    }).catch((err) => {
-                        console.error("Error checking AR support:", err);
-                        alert("Could not check for AR support.");
-                    });
-                } else {
-                    alert("WebXR API not available.");
-                }
-            });
-
-            sceneEl.addEventListener('enter-vr', function () {
-                console.log("Entered VR/XR mode. isXrMode:", isXrMode);
-                document.getElementById('ui-container').style.display = 'none'; // Hide UI when in VR/XR
-                 if (isXrMode) {
-                    groundEl.setAttribute('visible', 'false');
-                    skyEl.setAttribute('visible', 'false');
-                    // For XR, try to place model on a detected plane or use hit-test
-                    // This is a basic example; more advanced placement would use hit-test results
-                    modelPivotEl.setAttribute('position', '0 0.1 -1'); // Adjust initial position for AR
-                } else {
-                    groundEl.setAttribute('visible', 'true');
-                    skyEl.setAttribute('visible', 'true');
-                    modelPivotEl.setAttribute('position', '0 0.5 0');
-                }
-            });
-
-            sceneEl.addEventListener('exit-vr', function () {
-                console.log("Exited VR/XR mode.");
-                document.getElementById('ui-container').style.display = 'block';
-                // Restore visibility if it was changed
-                groundEl.setAttribute('visible', 'true');
-                skyEl.setAttribute('visible', 'true');
-            });
-
-            // Model Rotation Logic (using right hand controller grip or Alt + Mouse Drag)
-            let isDragging = false;
-            let previousDragX = 0;
-            let previousControllerX = 0;
-
-            // Mouse drag rotation
-            document.addEventListener('mousedown', function(e) {
-                if (e.altKey) { // Alt key + mouse drag
-                    isDragging = true;
-                    previousDragX = e.clientX;
-                    e.preventDefault();
-                }
-            });
-
-            document.addEventListener('mousemove', function(e) {
-                if (isDragging) {
-                    const currentX = e.clientX;
-                    const deltaX = currentX - previousDragX;
-                    const currentRotation = modelEl.getAttribute('rotation');
-                    modelEl.setAttribute('rotation', {
-                        x: currentRotation.x,
-                        y: currentRotation.y - deltaX * 0.5, // Adjust sensitivity
-                        z: currentRotation.z
-                    });
-                    previousDragX = currentX;
-                }
-            });
-
-            document.addEventListener('mouseup', function() {
-                if (isDragging) {
-                    isDragging = false;
-                }
-            });
-            document.addEventListener('mouseleave', function() { // Stop dragging if mouse leaves window
-                if (isDragging) {
-                    isDragging = false;
-                }
-            });
-
-
-            // VR Controller based rotation
-            rightHandEl.addEventListener('gripdown', function () {
-                if (sceneEl.is('vr-mode')) { // Only in VR mode
-                    isDragging = true;
-                    previousControllerX = rightHandEl.object3D.rotation.y; // Or use position if preferred
-                }
-            });
-
-            rightHandEl.addEventListener('gripup', function () {
-                if (isDragging) {
-                    isDragging = false;
-                }
-            });
-
-            // In the A-Frame render loop (tick) for smoother controller rotation
-            AFRAME.registerComponent('model-rotator', {
-                tick: function () {
-                    if (isDragging && sceneEl.is('vr-mode') && rightHandEl.components['oculus-touch-controls'] && rightHandEl.components['oculus-touch-controls'].data.hand === 'right') {
-                         // Check if grip is still active, as gripup might not always fire if button is held across state changes
-                        if (!rightHandEl.components['oculus-touch-controls'].controller || !rightHandEl.components['oculus-touch-controls'].controller.buttons[1].pressed) {
-                            isDragging = false;
-                            return;
-                        }
-
-                        const controllerObject = rightHandEl.object3D;
-                        const currentControllerRotY = controllerObject.rotation.y; // Using controller's orientation
-
-                        // A more direct way: check current controller world rotation and compare to last frame's
-                        // This example uses a simpler approach based on detecting drag start.
-                        // For precise rotation based on controller movement, you'd track controller's world space rotation delta.
-                        // This part needs refinement for smooth controller rotation based on actual movement.
-                        // The current 'previousControllerX' logic is a placeholder for a more robust delta calculation.
-
-                        // Let's try a different approach for controller rotation:
-                        // When grip is down, store initial model rotation and controller rotation.
-                        // While grip is held, calculate controller's rotation delta and apply to model.
-                        // This requires a more stateful component or careful handling in the tick.
-
-                        // For now, a simple placeholder:
-                        // This will likely spin fast or not as intended without proper delta calculation
-                        // const deltaX = currentControllerRotY - previousControllerX; // Simplified delta
-                        // modelEl.object3D.rotation.y -= deltaX * 0.1; // Apply rotation (adjust sensitivity)
-                        // previousControllerX = currentControllerRotY;
-
-                        // A simpler way to test: use thumbstick for rotation.
-                        const thumbstickAxes = rightHandEl.components['oculus-touch-controls']?.controller?.axes;
-                        if (thumbstickAxes && Math.abs(thumbstickAxes[2]) > 0.1) { // Index 2 is usually horizontal axis for thumbstick
-                            modelEl.object3D.rotation.y -= thumbstickAxes[2] * 0.05; // Adjust sensitivity
-                        }
-
+        // Initialize and check for XR capabilities
+        const checkXR = async () => {
+            if (navigator.xr) {
+                try {
+                    const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+                    if (!isSupported) {
+                        modeToggle.textContent = 'XR Not Supported';
+                        modeToggle.disabled = true;
                     }
+                } catch (e) {
+                    console.error("XR Check Error:", e);
+                    modeToggle.textContent = 'XR Check Failed';
+                    modeToggle.disabled = true;
+                }
+            } else {
+                modeToggle.textContent = 'XR Not Available';
+                modeToggle.disabled = true;
+            }
+        };
+
+        // Load selected model
+        const loadModel = (modelUrl) => {
+            if (currentModel) {
+                modelContainer.removeChild(currentModel);
+            }
+
+            // Show loading UI
+            loadingContainer.style.display = 'flex';
+            progressBar.style.width = '0%';
+
+            // Create model entity
+            currentModel = document.createElement('a-entity');
+            currentModel.setAttribute('id', 'active-model');
+            currentModel.setAttribute('position', '0 0 0');
+
+            // Set up model loading with progress tracking
+            const modelAsset = document.querySelector('#model');
+            modelAsset.setAttribute('src', modelUrl);
+
+            modelAsset.addEventListener('progress', (evt) => {
+                if (evt.detail.loaded && evt.detail.total) {
+                    const percentage = Math.min(100, Math.round((evt.detail.loaded / evt.detail.total) * 100));
+                    progressBar.style.width = `${percentage}%`;
                 }
             });
-            sceneEl.setAttribute('model-rotator', '');
 
+            modelAsset.addEventListener('loaded', () => {
+                currentModel.setAttribute('gltf-model', `#model`);
+                currentModel.setAttribute('animation-mixer', '');
+                currentModel.setAttribute('scale', '1 1 1');
 
-            // Initial model load
-            if (modelSelect.value) {
-                loadModel(modelSelect.value);
+                // Add model manipulation components for VR controllers
+                currentModel.setAttribute('manipulatable', '');
+
+                modelContainer.appendChild(currentModel);
+
+                // Hide loading UI after a short delay to allow model to appear
+                setTimeout(() => {
+                    loadingContainer.style.display = 'none';
+                }, 500);
+            });
+        };
+
+        // Switch between XR and VR modes
+        const toggleMode = () => {
+            currentMode = currentMode === 'vr' ? 'xr' : 'vr';
+
+            if (currentMode === 'xr') {
+                // XR mode - Mix with real world (camera pass-through)
+                modeToggle.textContent = 'Switch to VR Mode';
+                environment.setAttribute('visible', 'false');
+
+                // Request immersive-ar session if in VR
+                if (isInVR) {
+                    scene.exitVR().then(() => {
+                        setTimeout(() => {
+                            scene.enterAR();
+                        }, 300);
+                    }).catch(err => console.error("Error transitioning to AR:", err));
+                }
             } else {
-                console.warn("No model selected initially or model select is empty.");
-                showProgress(false);
+                // VR mode - Full virtual environment
+                modeToggle.textContent = 'Switch to XR Mode';
+                environment.setAttribute('visible', 'true');
+
+                // Request immersive-vr session if in AR
+                if (isInVR) {
+                    scene.exitVR().then(() => {
+                        setTimeout(() => {
+                            scene.enterVR();
+                        }, 300);
+                    }).catch(err => console.error("Error transitioning to VR:", err));
+                }
             }
+        };
+
+        // Handle controller interactions with model
+        AFRAME.registerComponent('manipulatable', {
+            init: function() {
+                this.rightGripDown = false;
+                this.leftGripDown = false;
+                this.initialScale = new THREE.Vector3();
+                this.currentHandDistance = 0;
+                this.initialHandDistance = 0;
+                this.rightPrevPosition = new THREE.Vector3();
+                this.leftPrevPosition = new THREE.Vector3();
+
+                // Listen for controller events
+                const rightHand = document.getElementById('right-hand');
+                const leftHand = document.getElementById('left-hand');
+
+                // Right hand grip for rotating
+                rightHand.addEventListener('gripdown', () => {
+                    this.rightGripDown = true;
+                    this.rightPrevPosition.copy(rightHand.object3D.position);
+                });
+
+                rightHand.addEventListener('gripup', () => {
+                    this.rightGripDown = false;
+                });
+
+                // Left hand grip for scaling (with both hands)
+                leftHand.addEventListener('gripdown', () => {
+                    this.leftGripDown = true;
+                    this.leftPrevPosition.copy(leftHand.object3D.position);
+
+                    // If both grips are down, initialize for scaling
+                    if (this.rightGripDown) {
+                        this.initialScale.copy(this.el.object3D.scale);
+                        this.initialHandDistance = this.getHandDistance();
+                    }
+                });
+
+                leftHand.addEventListener('gripup', () => {
+                    this.leftGripDown = false;
+                });
+            },
+
+            tick: function() {
+                const rightHand = document.getElementById('right-hand');
+                const leftHand = document.getElementById('left-hand');
+
+                // Rotate with right hand
+                if (this.rightGripDown && !this.leftGripDown) {
+                    const currentPosition = rightHand.object3D.position;
+                    const dx = currentPosition.x - this.rightPrevPosition.x;
+                    const dy = currentPosition.y - this.rightPrevPosition.y;
+
+                    // Rotate model based on controller movement
+                    this.el.object3D.rotation.y += dx * 2;
+                    this.el.object3D.rotation.x += dy * 2;
+
+                    this.rightPrevPosition.copy(currentPosition);
+                }
+
+                // Scale with both hands
+                if (this.rightGripDown && this.leftGripDown) {
+                    const currentHandDistance = this.getHandDistance();
+                    const scaleFactor = currentHandDistance / this.initialHandDistance;
+
+                    // Apply scale relative to initial scale
+                    this.el.object3D.scale.set(
+                        this.initialScale.x * scaleFactor,
+                        this.initialScale.y * scaleFactor,
+                        this.initialScale.z * scaleFactor
+                    );
+                }
+            },
+
+            getHandDistance: function() {
+                const rightHand = document.getElementById('right-hand');
+                const leftHand = document.getElementById('left-hand');
+
+                return rightHand.object3D.position.distanceTo(leftHand.object3D.position);
+            }
+        });
+
+        // Event listeners
+        scene.addEventListener('enter-vr', () => {
+            isInVR = true;
+            // Hide UI overlay in VR
+            document.getElementById('ui-overlay').style.display = 'none';
+        });
+
+        scene.addEventListener('exit-vr', () => {
+            isInVR = false;
+            // Show UI overlay when not in VR
+            document.getElementById('ui-overlay').style.display = 'flex';
+        });
+
+        modelSelector.addEventListener('change', () => {
+            loadModel(modelSelector.value);
+        });
+
+        modeToggle.addEventListener('click', toggleMode);
+
+        // Initialize on scene load
+        scene.addEventListener('loaded', () => {
+            checkXR();
+            loadModel(modelSelector.value);
         });
     </script>
 </body>

@@ -186,6 +186,13 @@
             const modelAsset = document.querySelector('#model');
             modelAsset.setAttribute('src', modelUrl);
 
+            // Add error handling for model loading
+            modelAsset.addEventListener('error', (error) => {
+                console.error('Error loading model:', error);
+                loadingContainer.style.display = 'none';
+                alert('Failed to load model. Please check the model file path and try again.');
+            });
+
             modelAsset.addEventListener('progress', (evt) => {
                 if (evt.detail.loaded && evt.detail.total) {
                     const percentage = Math.min(100, Math.round((evt.detail.loaded / evt.detail.total) * 100));
@@ -194,6 +201,7 @@
             });
 
             modelAsset.addEventListener('loaded', () => {
+                // Add model to the scene after asset is loaded
                 currentModel.setAttribute('gltf-model', `#model`);
                 currentModel.setAttribute('animation-mixer', '');
                 currentModel.setAttribute('scale', '1 1 1');
@@ -208,6 +216,14 @@
                     loadingContainer.style.display = 'none';
                 }, 500);
             });
+
+            // Fallback timeout to hide loading if model doesn't load within 30 seconds
+            setTimeout(() => {
+                if (loadingContainer.style.display !== 'none') {
+                    loadingContainer.style.display = 'none';
+                    console.warn('Model loading timed out');
+                }
+            }, 30000);
         };
 
         // Switch between XR and VR modes
@@ -258,6 +274,11 @@
                 const rightHand = document.getElementById('right-hand');
                 const leftHand = document.getElementById('left-hand');
 
+                if (!rightHand || !leftHand) {
+                    console.warn('Hand controllers not found, manipulation may not work');
+                    return;
+                }
+
                 // Right hand grip for rotating
                 rightHand.addEventListener('gripdown', () => {
                     this.rightGripDown = true;
@@ -286,8 +307,12 @@
             },
 
             tick: function() {
+                if (!this.el.object3D) return; // Prevent errors if object not initialized
+
                 const rightHand = document.getElementById('right-hand');
                 const leftHand = document.getElementById('left-hand');
+
+                if (!rightHand || !leftHand) return;
 
                 // Rotate with right hand
                 if (this.rightGripDown && !this.leftGripDown) {
@@ -304,21 +329,33 @@
 
                 // Scale with both hands
                 if (this.rightGripDown && this.leftGripDown) {
-                    const currentHandDistance = this.getHandDistance();
-                    const scaleFactor = currentHandDistance / this.initialHandDistance;
+                    try {
+                        const currentHandDistance = this.getHandDistance();
+                        if (currentHandDistance > 0 && this.initialHandDistance > 0) {
+                            const scaleFactor = currentHandDistance / this.initialHandDistance;
 
-                    // Apply scale relative to initial scale
-                    this.el.object3D.scale.set(
-                        this.initialScale.x * scaleFactor,
-                        this.initialScale.y * scaleFactor,
-                        this.initialScale.z * scaleFactor
-                    );
+                            // Apply scale relative to initial scale, with limits to prevent extreme scaling
+                            const maxScale = 10;
+                            const minScale = 0.1;
+                            const newScaleX = Math.min(maxScale, Math.max(minScale, this.initialScale.x * scaleFactor));
+                            const newScaleY = Math.min(maxScale, Math.max(minScale, this.initialScale.y * scaleFactor));
+                            const newScaleZ = Math.min(maxScale, Math.max(minScale, this.initialScale.z * scaleFactor));
+
+                            this.el.object3D.scale.set(newScaleX, newScaleY, newScaleZ);
+                        }
+                    } catch (e) {
+                        console.error('Error during scaling:', e);
+                    }
                 }
             },
 
             getHandDistance: function() {
                 const rightHand = document.getElementById('right-hand');
                 const leftHand = document.getElementById('left-hand');
+
+                if (!rightHand || !leftHand || !rightHand.object3D || !leftHand.object3D) {
+                    return 0;
+                }
 
                 return rightHand.object3D.position.distanceTo(leftHand.object3D.position);
             }
@@ -346,7 +383,19 @@
         // Initialize on scene load
         scene.addEventListener('loaded', () => {
             checkXR();
-            loadModel(modelSelector.value);
+
+            // Verify models directory access before loading
+            fetch('models/')
+                .then(response => {
+                    if (!response.ok) {
+                        console.warn('Models directory might not be accessible');
+                    }
+                    loadModel(modelSelector.value);
+                })
+                .catch(error => {
+                    console.error('Error checking models directory:', error);
+                    loadModel(modelSelector.value);
+                });
         });
     </script>
 </body>

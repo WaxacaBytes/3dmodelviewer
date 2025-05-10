@@ -4,9 +4,9 @@
     <meta charset="utf-8">
     <title>Meta Quest MR Model Viewer</title>
     <meta name="description" content="3D Model Viewer for Meta Quest in Mixed Reality">
-    <!-- Standard Viewport -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+     <!-- A-Frame Extras for gesture controls (scale/rotate) and teleport -->
     <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; }
@@ -20,14 +20,15 @@
             border-radius: 8px;
             font-family: sans-serif;
             font-size: 14px;
-            z-index: 1000;
-            display: none;
+            z-index: 1000; /* Ensure it's above the A-Frame canvas */
+            display: none; /* Hidden by default, shown on VR/AR entry */
         }
         #overlay p { margin: 5px 0; }
+         #overlay ul { padding-left: 20px; margin: 5px 0;}
     </style>
 </head>
 <body>
-    <div id="overlay">
+     <div id="overlay">
         <p><strong>Controls:</strong></p>
         <p><strong>Right Controller:</strong></p>
         <ul>
@@ -35,8 +36,8 @@
         </ul>
         <p><strong>Left Controller (pointing at model):</strong></p>
         <ul>
-            <li><strong>Grip + Move:</strong> Rotate model.</li>
-            <li><strong>Trigger + Move Up/Down:</strong> Scale model.</li>
+             <li><strong>Grip + Move:</strong> Rotate model.</li>
+             <li><strong>Trigger + Move Up/Down:</strong> Scale model.</li>
         </ul>
         <p>Enter VR/MR mode to interact.</p>
     </div>
@@ -48,15 +49,17 @@
         "
         renderer="colorManagement: true; physicallyCorrectLights: true;"
         background="transparent: true"
-        xr-mode-ui="enabled: true;" <!-- Let A-Frame create the default button -->
-    >
+        xr-mode-ui="enabled: true;"
+     >
         <a-assets>
-            <!-- !!! REPLACE with your model !!! -->
-            <a-asset-item id="myModel" src="models/02498bb2af6c6ae3f665ac61c64df98d.glb"></a-asset-item>
+             <!-- CORRECTED PATH (Check your repo for exact Case!) -->
+            <a-asset-item id="myModel" src="models/02498bb2af6c6ae3f665ac61c64df98d.glb" crossorigin="anonymous"></a-asset-item>
+
             <img id="groundTexture" src="https://cdn.aframe.io/a-painter/images/floor.jpg" crossorigin="anonymous">
         </a-assets>
 
-        <a-entity id="rig" position="0 0 0" movement-controls="controls: checkpoint, nipple; fly: false;">
+       <!-- Camera Rig - This entity moves when you teleport or physically walk -->
+       <a-entity id="rig" position="0 0 0">
             <a-entity
                 id="camera"
                 camera
@@ -65,44 +68,43 @@
             ></a-entity>
         </a-entity>
 
+        <!-- Model Container: Stays at its world position. Interacted with. -->
         <a-entity
             id="modelContainer"
             position="0 1 -2"
             rotation="0 0 0"
             gesture-handler="minScale: 0.1; maxScale: 10;"
-            animation__mouseenter="property: scale; to: 1.05 1.05 1.05; startEvents: mouseenter; dur: 200; dir: alternate; loop: 2"
-            animation__mouseleave="property: scale; to: 1 1 1; startEvents: mouseleave; dur: 200"
-        >
+         >
+             <!-- The actual 3D model -->
             <a-entity
                 gltf-model="#myModel"
                 id="theModel"
-                scale="0.5 0.5 0.5"
-                rotation="0 0 0"
+               scale="0.5 0.5 0.5"
+               rotation="0 0 0"
                 shadow="receive: false; cast: true"
             ></a-entity>
         </a-entity>
 
+       <!-- Controllers -->
         <a-entity id="leftHand"
             oculus-touch-controls="hand: left"
             hand-tracking-controls="hand: left;"
             laser-controls="hand: left"
-            raycaster="objects: #modelContainer, [gltf-model]; far: 5;"
+            raycaster="objects: #modelContainer; far: 5;" <!-- IMPORTANT: Point raycaster at the container that has gesture-handler -->
             > </a-entity>
 
-        <a-entity id="rightHand"
+       <a-entity id="rightHand"
             oculus-touch-controls="hand: right"
-            hand-tracking-controls="hand: right;"
+             hand-tracking-controls="hand: right;"
             laser-controls="hand: right"
             raycaster="objects: #ground, .teleportable; far: 10;"
             teleport-controls="
                 cameraRig: #rig;
                 teleportOrigin: #camera;
-                collisionEntities: #ground, .teleportable;
+                collisionEntities: #ground;
                 type: parabolic;
                 button: trigger;
-                startEvents: teleportstart;
-                endEvents: teleportend;
-                hitCylinderColor: #5290E6;
+                 hitCylinderColor: #5290E6;
                 hitCylinderRadius: 0.3;
                 hitCylinderHeight: 0.1;
             ">
@@ -122,15 +124,15 @@
                 shadowCameraRight: 5;
                 shadowCameraTop: 5;
                 shadowCameraBottom: -5;
-                shadowCameraFar: 50;
-                shadowBias: -0.001;
-            "
-            position="-1 2 1.5" <!-- Position of the light entity -->
+                 shadowCameraFar: 50;
+                 shadowBias: -0.001;
+             "
+            position="-1 2 1.5"
         ></a-entity>
 
         <a-plane
             id="ground"
-            class="teleportable"
+           class="teleportable"
             position="0 -0.01 0"
             rotation="-90 0 0"
             width="50"
@@ -138,40 +140,23 @@
             material="shader: flat; src: #groundTexture; repeat: 50 50; color: #555; transparent: true; opacity: 0.2;"
             shadow="receive: true"
             visible="true"
-        ></a-plane>
+          ></a-plane>
 
         <a-sky color="#ECECEC" material="transparent: true; opacity: 0;"></a-sky>
 
     </a-scene>
 
-    <script>
+     <script>
+        // Ensure DOM is loaded before attaching listeners if needed, but A-Frame handles its own components.
+
         document.querySelector('a-scene').addEventListener('enter-vr', function () {
             document.getElementById('overlay').style.display = 'block';
-            const session = this.xrSession;
-            if (session && (session.environmentBlendMode === 'additive' || session.environmentBlendMode === 'alpha-blend')) {
-                console.log("Entered Mixed Reality (Passthrough) mode.");
-            } else {
-                console.log("Entered VR mode.");
-            }
-        });
+         });
 
         document.querySelector('a-scene').addEventListener('exit-vr', function () {
-            document.getElementById('overlay').style.display = 'none';
+             document.getElementById('overlay').style.display = 'none';
         });
 
-        const rightHand = document.getElementById('rightHand');
-        if (rightHand) { // Check if element exists before adding listener
-            rightHand.addEventListener('teleportstart', function (evt) {
-                console.log('Teleport started', evt.detail);
-            });
-            rightHand.addEventListener('teleportend', function (evt) {
-                console.log('Teleport ended', evt.detail.oldPosition, '->', evt.detail.newPosition);
-            });
-        } else {
-            console.error("Right hand element not found for teleport listeners.");
-        }
     </script>
 </body>
 </html>
-
-

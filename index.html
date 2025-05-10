@@ -234,8 +234,20 @@
         // For AR mode, set appropriate background settings
         if (xrMode === 'ar') {
             scene.background = null;
+
+            // Make sure environment integration is enabled for camera passthrough
+            sessionInit.optionalFeatures = [
+                'camera-access',
+                'environment-integration',
+                'light-estimation',
+                'depth-sensing',
+                'dom-overlay'
+            ];
+
+            // Set required features for AR
             sessionInit.requiredFeatures = ['hit-test'];
-            sessionInit.optionalFeatures.push('dom-overlay');
+
+            // Set DOM overlay for UI in AR mode
             sessionInit.domOverlay = { root: document.getElementById('ui') };
         }
 
@@ -259,6 +271,15 @@
 
         // Configure renderer for the session
         renderer.xr.setSession(session);
+
+        // Handle AR session specifically
+        if (session.mode === 'immersive-ar') {
+            console.log("AR session mode detected");
+            // Ensure transparent clear for AR mode
+            renderer.setClearAlpha(0);
+            // Ensure scene background is null for AR
+            scene.background = null;
+        }
 
         // Request all possible reference spaces
         const referenceSpaceTypes = ['local', 'local-floor', 'bounded-floor', 'unbounded'];
@@ -291,7 +312,7 @@
 
                 console.log("Using reference space:", preferredSpace.type);
                 baseReferenceSpace = preferredSpace.space;
-        });
+            });
 
         // Hide UI in VR mode
         if (xrMode === 'vr') {

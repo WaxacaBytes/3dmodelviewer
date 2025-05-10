@@ -226,29 +226,29 @@
     function onButtonClick() {
         const sessionType = xrMode === 'vr' ? 'immersive-vr' : 'immersive-ar';
 
-        // Define session options
-        const sessionInit = {
-            optionalFeatures: ['local-floor', 'bounded-floor']
-        };
+        // Define session options based on mode
+        let sessionInit = {};
 
-        // For AR mode, set appropriate background settings
-        if (xrMode === 'ar') {
+        if (xrMode === 'vr') {
+            // VR mode configuration
+            sessionInit = {
+                optionalFeatures: ['local-floor', 'bounded-floor']
+            };
+        } else {
+            // AR mode configuration - simplified for better compatibility
+            console.log("Using simplified AR configuration for Quest compatibility");
+            sessionInit = {
+                requiredFeatures: [], // No strict requirements to improve compatibility
+                optionalFeatures: ['dom-overlay']
+            };
+
+            // Set DOM overlay if available
+            if (sessionInit.optionalFeatures.includes('dom-overlay')) {
+                sessionInit.domOverlay = { root: document.getElementById('ui') };
+            }
+
+            // Make sure background is null for AR
             scene.background = null;
-
-            // Make sure environment integration is enabled for camera passthrough
-            sessionInit.optionalFeatures = [
-                'camera-access',
-                'environment-integration',
-                'light-estimation',
-                'depth-sensing',
-                'dom-overlay'
-            ];
-
-            // Set required features for AR
-            sessionInit.requiredFeatures = ['hit-test'];
-
-            // Set DOM overlay for UI in AR mode
-            sessionInit.domOverlay = { root: document.getElementById('ui') };
         }
 
         console.log("Requesting XR session:", sessionType, sessionInit);
@@ -262,7 +262,7 @@
     }
 
     function onSessionStarted(session) {
-        console.log("XR Session started successfully");
+        console.log("XR Session started successfully:", session.mode);
 
         session.addEventListener('end', onSessionEnded);
 
@@ -274,13 +274,34 @@
 
         // Handle AR session specifically
         if (session.mode === 'immersive-ar') {
-            console.log("AR session mode detected");
+            console.log("AR session mode active - configuring for passthrough");
             // Ensure transparent clear for AR mode
             renderer.setClearAlpha(0);
-            // Ensure scene background is null for AR
             scene.background = null;
+
+            // Use a simpler reference space for AR
+            session.requestReferenceSpace('viewer')
+                .then((referenceSpace) => {
+                    console.log("Using 'viewer' reference space for AR");
+                    baseReferenceSpace = referenceSpace;
+                })
+                .catch((error) => {
+                    console.warn("Could not get viewer reference space:", error);
+                    // Fall back to other reference spaces
+                    requestFallbackReferenceSpaces(session);
+                });
+        } else {
+            // Request reference spaces for VR
+            requestFallbackReferenceSpaces(session);
         }
 
+        // Hide UI in VR mode
+        if (xrMode === 'vr') {
+            document.getElementById('ui').style.display = 'none';
+        }
+    }
+
+    function requestFallbackReferenceSpaces(session) {
         // Request all possible reference spaces
         const referenceSpaceTypes = ['local', 'local-floor', 'bounded-floor', 'unbounded'];
 
@@ -313,11 +334,6 @@
                 console.log("Using reference space:", preferredSpace.type);
                 baseReferenceSpace = preferredSpace.space;
             });
-
-        // Hide UI in VR mode
-        if (xrMode === 'vr') {
-            document.getElementById('ui').style.display = 'none';
-        }
     }
 
     function onSessionEnded() {

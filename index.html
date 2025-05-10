@@ -48,7 +48,7 @@
         renderer="colorManagement: true; physicallyCorrectLights: true;"
         background="transparent: true"
         xr-mode-ui="enabled: true;"
-        vr-mode-ui="enterVRButton: #myEnterVRButton;" <!-- Custom button (optional, ensure it exists or remove this line) -->
+        vr-mode-ui="enterVRButton: #myEnterVRButton;"
     >
         <!-- If you use a custom enterVRButton, add it here: -->
         <!-- <button id="myEnterVRButton" style="position: fixed; bottom: 20px; right: 20px; z-index: 10001;">Enter VR</button> -->
@@ -78,7 +78,7 @@
             <a-entity
                 gltf-model="#myModel"
                 id="theModel"
-                scale="0.5 0.5 0.5" <!-- Adjust initial scale as needed for your mototaxi.glb -->
+                scale="0.5 0.5 0.5"
                 rotation="0 0 0"
                 shadow="receive: false; cast: true"
             ></a-entity>
@@ -87,7 +87,7 @@
         <a-entity id="leftHand"
             oculus-touch-controls="hand: left"
             hand-tracking-controls="hand: left;"
-            laser-controls="hand: left; model: false;" <!-- model:false can make laser less obtrusive with hands -->
+            laser-controls="hand: left; model: false;"
             raycaster="objects: #modelContainer, [gltf-model]; far: 5;"
             > </a-entity>
 
@@ -95,7 +95,7 @@
             oculus-touch-controls="hand: right"
             hand-tracking-controls="hand: right;"
             laser-controls="hand: right; model: false;"
-            raycaster="objects: .teleportable, #ground; far: 10;" <!-- Ensure #ground is also teleportable if not using class -->
+            raycaster="objects: .teleportable, #ground; far: 10;"
             teleport-controls="
                 cameraRig: #rig;
                 teleportOrigin: #camera;
@@ -126,7 +126,7 @@
                 shadowCameraFar: 50;
                 shadowBias: -0.001;
             "
-            position="-2 3 2" <!-- Adjusted light position -->
+            position="-2 3 2"
         ></a-entity>
 
         <a-plane
@@ -136,7 +136,7 @@
             rotation="-90 0 0"
             width="50"
             height="50"
-            material="shader: flat; color: #444; transparent: false; opacity: 1;" <!-- Made ground more visible -->
+            material="shader: flat; color: #444; transparent: false; opacity: 1;"
             shadow="receive: true"
             visible="true"
         ></a-plane>

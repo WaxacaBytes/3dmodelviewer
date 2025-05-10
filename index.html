@@ -72,6 +72,20 @@
             background-color: #4CAF50;
             transition: width 0.3s;
         }
+        #debug-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 80%;
+            max-height: 30%;
+            overflow-y: auto;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -103,6 +117,8 @@
     </div>
 
     <button id="xr-button" disabled>ENTER XR</button>
+
+    <div id="debug-info"></div>
 
     <div id="loading-container">
         <h3>Loading Model...</h3>
@@ -136,10 +152,26 @@
       let xrMode = 'vr';
       let loadedModel = null;
 
+    // Add visible debug functionality
+    function showDebug(message) {
+        const debugElement = document.getElementById('debug-info');
+        const timestamp = new Date().toLocaleTimeString();
+        debugElement.innerHTML += `<div>[${timestamp}] ${message}</div>`;
+        console.log(message);  // Also log to console for desktop debugging
+    }
+
+    // Clear debug messages
+    function clearDebug() {
+        document.getElementById('debug-info').innerHTML = '';
+    }
+
     // Initialize the scene
     init();
 
     function init() {
+        clearDebug();
+        showDebug("Initializing 3D viewer");
+
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x505050);
 
@@ -175,17 +207,17 @@
         document.getElementById('xr-mode').addEventListener('change', function(e) {
             xrMode = e.target.value;
             button.textContent = xrMode === 'vr' ? 'ENTER VR' : 'ENTER XR';
+            showDebug(`Mode changed to: ${xrMode}`);
         });
 
         document.getElementById('load-model').addEventListener('click', loadSelectedModel);
 
         // Check XR support
         if (navigator.xr) {
-            // Add debug output for XR support
-            console.log("WebXR API is available");
+            showDebug("WebXR API is available");
 
             navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-                console.log("VR support:", supported);
+                showDebug(`VR support: ${supported ? 'Yes' : 'No'}`);
                 if (supported) {
                     button.disabled = false;
                     button.textContent = 'ENTER VR';
@@ -194,13 +226,15 @@
             });
 
             navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-                console.log("AR support:", supported);
+                showDebug(`AR support: ${supported ? 'Yes' : 'No'}`);
                 if (supported) {
                     document.getElementById('xr-mode').disabled = false;
+                } else {
+                    showDebug("AR/XR not supported on this device");
                 }
             });
         } else {
-            console.warn("WebXR API is not available on this device/browser");
+            showDebug("WebXR API is not available on this device/browser");
             button.textContent = 'XR NOT SUPPORTED';
         }
 
@@ -226,118 +260,104 @@
     function onButtonClick() {
         const sessionType = xrMode === 'vr' ? 'immersive-vr' : 'immersive-ar';
 
-        // Define session options based on mode
+        showDebug(`Attempting to enter ${sessionType} mode`);
+
+        // Ultra simplified session init - minimal options for maximum compatibility
         let sessionInit = {};
 
         if (xrMode === 'vr') {
-            // VR mode configuration
-            sessionInit = {
-                optionalFeatures: ['local-floor', 'bounded-floor']
-            };
+            sessionInit = { optionalFeatures: [] };
         } else {
-            // AR mode configuration - simplified for better compatibility
-            console.log("Using simplified AR configuration for Quest compatibility");
-            sessionInit = {
-                requiredFeatures: [], // No strict requirements to improve compatibility
-                optionalFeatures: ['dom-overlay']
-            };
+            // For AR, use absolute minimal configuration
+            scene.background = null;
+            sessionInit = { optionalFeatures: [] };
 
-            // Set DOM overlay if available
-            if (sessionInit.optionalFeatures.includes('dom-overlay')) {
+            // Only try dom-overlay if we're not on Quest since it might be causing issues
+            const isQuestBrowser = /OculusBrowser/.test(navigator.userAgent);
+            if (!isQuestBrowser) {
+                sessionInit.optionalFeatures.push('dom-overlay');
                 sessionInit.domOverlay = { root: document.getElementById('ui') };
             }
 
-            // Make sure background is null for AR
-            scene.background = null;
+            showDebug(`Using minimal AR config. Quest browser: ${isQuestBrowser}`);
         }
 
-        console.log("Requesting XR session:", sessionType, sessionInit);
+        showDebug(`Requesting ${sessionType} session...`);
 
         navigator.xr.requestSession(sessionType, sessionInit)
-            .then(onSessionStarted)
+            .then(session => {
+                showDebug(`${sessionType} session started!`);
+                onSessionStarted(session);
+            })
             .catch(error => {
-                console.error('Error starting XR session:', error);
-                alert('Failed to start XR session: ' + error.message);
+                showDebug(`Error starting ${sessionType} session: ${error.message}`);
+
+                // Check if this is a Quest and provide specific guidance
+                const isQuestBrowser = /OculusBrowser/.test(navigator.userAgent);
+                if (isQuestBrowser && sessionType === 'immersive-ar') {
+                    showDebug("Note: Full AR/MR camera access may not be supported in the Quest browser.");
+                    showDebug("MR is typically only fully supported in native Quest apps.");
+                }
             });
     }
 
     function onSessionStarted(session) {
-        console.log("XR Session started successfully:", session.mode);
-
+        showDebug(`Session mode: ${session.mode}`);
         session.addEventListener('end', onSessionEnded);
 
         // Setup controllers
         setupControllers(session);
 
-        // Configure renderer for the session
-        renderer.xr.setSession(session);
+        try {
+            // Configure renderer for the session
+            renderer.xr.setSession(session);
+            showDebug("Renderer configured for XR session");
 
-        // Handle AR session specifically
-        if (session.mode === 'immersive-ar') {
-            console.log("AR session mode active - configuring for passthrough");
-            // Ensure transparent clear for AR mode
-            renderer.setClearAlpha(0);
-            scene.background = null;
+            // Handle AR session specifically
+            if (session.mode === 'immersive-ar') {
+                showDebug("Configuring for AR mode");
+                // Ensure transparent clear for AR mode
+                renderer.setClearAlpha(0);
+                scene.background = null;
+            }
 
-            // Use a simpler reference space for AR
+            // Try to get a reference space, starting with 'viewer'
             session.requestReferenceSpace('viewer')
-                .then((referenceSpace) => {
-                    console.log("Using 'viewer' reference space for AR");
-                    baseReferenceSpace = referenceSpace;
+                .then(space => {
+                    showDebug("Using 'viewer' reference space");
+                    baseReferenceSpace = space;
                 })
-                .catch((error) => {
-                    console.warn("Could not get viewer reference space:", error);
-                    // Fall back to other reference spaces
-                    requestFallbackReferenceSpaces(session);
+                .catch(error => {
+                    showDebug(`Viewer reference space error: ${error.message}`);
+
+                    // Fall back to local
+                    session.requestReferenceSpace('local')
+                        .then(space => {
+                            showDebug("Using 'local' reference space as fallback");
+                            baseReferenceSpace = space;
+                        })
+                        .catch(err => {
+                            showDebug(`Local reference space error: ${err.message}`);
+                            showDebug("No suitable reference space found - session may not work properly");
+                        });
                 });
-        } else {
-            // Request reference spaces for VR
-            requestFallbackReferenceSpaces(session);
+        } catch (error) {
+            showDebug(`Error in session setup: ${error.message}`);
         }
 
         // Hide UI in VR mode
         if (xrMode === 'vr') {
             document.getElementById('ui').style.display = 'none';
+        } else {
+            document.getElementById('ui').style.display = 'block';
         }
-    }
 
-    function requestFallbackReferenceSpaces(session) {
-        // Request all possible reference spaces
-        const referenceSpaceTypes = ['local', 'local-floor', 'bounded-floor', 'unbounded'];
-
-        let referenceSpacePromises = referenceSpaceTypes.map(type => {
-            return session.requestReferenceSpace(type)
-                .then(space => ({ type, space }))
-                .catch(error => {
-                    console.warn(`Reference space ${type} not supported:`, error);
-                    return null;
-                });
-        });
-
-        Promise.all(referenceSpacePromises)
-            .then(results => {
-                results = results.filter(result => result !== null);
-
-                if (results.length === 0) {
-                    console.error("No reference spaces available");
-                    session.end();
-                    return;
-                }
-
-                console.log("Available reference spaces:", results.map(r => r.type));
-
-                // Prefer local-floor or bounded-floor for VR
-                let preferredSpace = results.find(r => r.type === 'local-floor') ||
-                                    results.find(r => r.type === 'bounded-floor') ||
-                                    results[0];
-
-                console.log("Using reference space:", preferredSpace.type);
-                baseReferenceSpace = preferredSpace.space;
-            });
+        // Always show debug in XR
+        document.getElementById('debug-info').style.display = 'block';
     }
 
     function onSessionEnded() {
-        console.log("XR Session ended");
+        showDebug("XR Session ended");
         // Show UI again
         document.getElementById('ui').style.display = 'block';
     }
